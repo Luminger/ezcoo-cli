@@ -10,7 +10,7 @@ class Device(contextlib.AbstractContextManager):
     def __init__(self, path: Path) -> None:
         self._serial = serial.Serial()
         self._serial.port = str(path)
-        self._serial.baudrate = 115600
+        self._serial.baudrate = 115200
         self._serial.timeout = 1
 
     def __enter__(self) -> "Device":
