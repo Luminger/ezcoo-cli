@@ -15,7 +15,6 @@ device_option = click.option(
     required=True,
     default="/dev/ttyUSB0",
 )
-input_argument = click.argument("input", type=click.IntRange(1, 4), required=True)
 
 
 @click.group()
@@ -31,17 +30,17 @@ def input() -> None:
 
 @input.command()
 @device_option
-@input_argument
-@click.option("--output", type=click.IntRange(1, 1), default=1, help="Output to switch")
-def switch(path: Path, input: int, output: int) -> None:
-    with Device(path) as client:
+@click.argument("input", type=click.IntRange(1, 8), required=True)
+@click.option("--output", type=click.IntRange(1, 2), default=1, help="Output to switch")
+def switch(device: Path, input: int, output: int) -> None:
+    with Device(device) as client:
         client.write(f"EZS OUT{output} VS IN{input}")
 
 
 @input.command()
 @device_option
-def edid(path: Path) -> None:
-    with Device(path) as client:
+def edid(device: Path) -> None:
+    with Device(device) as client:
         client.write("EZG IN0 EDID")
         for line in client.readlines():
             print(line, end="")
@@ -49,8 +48,8 @@ def edid(path: Path) -> None:
 
 @main.command()
 @device_option
-def help(path: Path) -> None:
-    with Device(path) as client:
+def help(device: Path) -> None:
+    with Device(device) as client:
         client.write("EZH")
         for line in client.readlines():
             print(line, end="")
