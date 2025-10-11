@@ -7,7 +7,6 @@ import click
 
 from . import __version__
 from .kvm import KVM, KVMError
-from .models import HelpInfo, OutputRouting, StreamStatus, SystemStatus
 
 
 @dataclass
@@ -44,38 +43,6 @@ format_option = click.option(
 )
 
 
-def format_pretty_status(status: SystemStatus) -> None:
-    """Format SystemStatus for pretty output."""
-    click.echo(f"System Address: {status.system_address:02d}")
-    click.echo(f"Firmware Version: {status.firmware_version}")
-    config = status.serial_config
-    click.echo(f"Serial Port: {config.baud_rate} baud, {config.data_bits}{config.parity[0]}{config.stop_bits}")
-
-
-def format_pretty_help(help_info: HelpInfo) -> None:
-    """Format HelpInfo for pretty output."""
-    click.echo("EZCOO Device Help Summary:")
-    click.echo("=" * 40)
-
-    if help_info.firmware_version:
-        click.echo(f"Firmware Version: {help_info.firmware_version}")
-
-    for cmd in help_info.commands:
-        click.echo(f"  {cmd.command}: {cmd.description}")
-
-    click.echo(f"\nTotal commands available: {help_info.total_commands}")
-
-
-def format_pretty_routing(routing: OutputRouting) -> None:
-    """Format OutputRouting for pretty output."""
-    click.echo(f"Output {routing.output} is connected to Input {routing.input}")
-
-
-def format_pretty_stream(stream: StreamStatus) -> None:
-    """Format StreamStatus for pretty output."""
-    click.echo(f"Output {stream.output} stream is {stream.status}")
-
-
 @click.group()
 def main() -> None:
     """A tool to control EZCOO KVM switches via the serial interface."""
@@ -102,7 +69,10 @@ def status(device: Path, address: int, format: str) -> None:
             case "json":
                 click.echo(json.dumps(asdict(status_info), indent=2))
             case "pretty":
-                format_pretty_status(status_info)
+                click.echo(f"System Address: {status_info.system_address:02d}")
+                click.echo(f"Firmware Version: {status_info.firmware_version}")
+                c = status_info.serial_config
+                click.echo(f"Serial Port: {c.baud_rate} baud, {c.data_bits}{c.parity[0]}{c.stop_bits}")
             case _:  # raw
                 click.echo(status_info.raw_response, nl=False)
     except KVMError as e:
@@ -124,7 +94,16 @@ def help(device: Path, address: int, format: str) -> None:
             case "json":
                 click.echo(json.dumps(asdict(help_info), indent=2))
             case "pretty":
-                format_pretty_help(help_info)
+                click.echo("EZCOO Device Help Summary:")
+                click.echo("=" * 40)
+
+                if help_info.firmware_version:
+                    click.echo(f"Firmware Version: {help_info.firmware_version}")
+
+                for cmd in help_info.commands:
+                    click.echo(f"  {cmd.command}: {cmd.description}")
+
+                click.echo(f"\nTotal commands available: {help_info.total_commands}")
             case _:  # raw
                 click.echo(help_info.raw_response, nl=False)
     except KVMError as e:
@@ -178,7 +157,7 @@ def routing(device: Path, address: int, output: int, format: str) -> None:
             case "json":
                 click.echo(json.dumps(asdict(routing_info), indent=2))
             case "pretty":
-                format_pretty_routing(routing_info)
+                click.echo(f"Output {routing_info.output} is connected to Input {routing_info.input}")
             case _:  # raw
                 click.echo(routing_info.raw_response, nl=False)
     except (KVMError, ValueError) as e:
@@ -201,7 +180,7 @@ def stream(device: Path, address: int, output: int, format: str) -> None:
             case "json":
                 click.echo(json.dumps(asdict(stream_info), indent=2))
             case "pretty":
-                format_pretty_stream(stream_info)
+                click.echo(f"Output {stream_info.output} stream is {stream_info.status}")
             case _:  # raw
                 click.echo(stream_info.raw_response, nl=False)
     except (KVMError, ValueError) as e:
