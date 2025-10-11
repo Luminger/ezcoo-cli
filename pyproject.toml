@@ -1,6 +1,6 @@
 [project]
 name = "ezcoo-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "A tool to control EZCOO KVM switches via the serial interface"
 authors = [{ name = "Simon Brakhane", email = "simon@brakhane.net" }]
 requires-python = ">=3.10"
