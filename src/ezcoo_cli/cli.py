@@ -1,27 +1,24 @@
 #!/usr/bin/env python
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import click
 
 from . import __version__
 from .kvm import KVM, KVMError
-
-
-@dataclass
-class DiscoveredDevice:
-    """Information about a discovered device."""
-
-    address: int
-    firmware: str
-    system_address: int
-
+from .models import DiscoveredDevice
 
 device_option = click.option(
     "-d",
     "--device",
-    type=click.Path(exists=True, dir_okay=False, writable=True, readable=True, path_type=Path),
+    type=click.Path(
+        exists=True,
+        dir_okay=False,
+        writable=True,
+        readable=True,
+        path_type=Path,
+    ),
     required=True,
     default="/dev/ttyUSB0",
 )
@@ -74,7 +71,7 @@ def status(device: Path, address: int, format: str) -> None:
                 c = status_info.serial_config
                 click.echo(f"Serial Port: {c.baud_rate} baud, {c.data_bits}{c.parity[0]}{c.stop_bits}")
             case _:  # raw
-                click.echo(status_info.raw_response, nl=False)
+                click.echo("".join(status_info.raw_response), nl=False)
     except KVMError as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -105,7 +102,7 @@ def help(device: Path, address: int, format: str) -> None:
 
                 click.echo(f"\nTotal commands available: {help_info.total_commands}")
             case _:  # raw
-                click.echo(help_info.raw_response, nl=False)
+                click.echo("".join(help_info.raw_response), nl=False)
     except KVMError as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -121,7 +118,12 @@ def input() -> None:
 @device_option
 @address_option
 @click.argument("input", type=click.IntRange(1, 4), required=True)
-@click.option("--output", type=click.IntRange(1, 1), default=1, help="Output to switch (only output 1 supported)")
+@click.option(
+    "--output",
+    type=click.IntRange(1, 1),
+    default=1,
+    help="Output to switch (only output 1 supported)",
+)
 def switch(device: Path, address: int, input: int, output: int) -> None:
     """Switch an input to the specified output.
 
@@ -145,7 +147,12 @@ def output() -> None:
 @output.command()
 @device_option
 @address_option
-@click.option("--output", type=click.IntRange(1, 1), default=1, help="Output to query (only output 1 supported)")
+@click.option(
+    "--output",
+    type=click.IntRange(1, 1),
+    default=1,
+    help="Output to query (only output 1 supported)",
+)
 @format_option
 def routing(device: Path, address: int, output: int, format: str) -> None:
     """Get current output video routing."""
@@ -159,7 +166,7 @@ def routing(device: Path, address: int, output: int, format: str) -> None:
             case "pretty":
                 click.echo(f"Output {routing_info.output} is connected to Input {routing_info.input}")
             case _:  # raw
-                click.echo(routing_info.raw_response, nl=False)
+                click.echo("".join(routing_info.raw_response), nl=False)
     except (KVMError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -168,7 +175,12 @@ def routing(device: Path, address: int, output: int, format: str) -> None:
 @output.command()
 @device_option
 @address_option
-@click.option("--output", type=click.IntRange(1, 1), default=1, help="Output to query (only output 1 supported)")
+@click.option(
+    "--output",
+    type=click.IntRange(1, 1),
+    default=1,
+    help="Output to query (only output 1 supported)",
+)
 @format_option
 def stream(device: Path, address: int, output: int, format: str) -> None:
     """Get output stream status."""
@@ -182,7 +194,7 @@ def stream(device: Path, address: int, output: int, format: str) -> None:
             case "pretty":
                 click.echo(f"Output {stream_info.output} stream is {stream_info.status}")
             case _:  # raw
-                click.echo(stream_info.raw_response, nl=False)
+                click.echo("".join(stream_info.raw_response), nl=False)
     except (KVMError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -251,7 +263,9 @@ def discover(device: Path, start: int, end: int, format: str) -> None:
                 status = kvm.get_system_status()
                 found_devices.append(
                     DiscoveredDevice(
-                        address=addr, firmware=status.firmware_version, system_address=status.system_address
+                        address=addr,
+                        firmware=status.firmware_version,
+                        system_address=status.system_address,
                     )
                 )
                 if format != "json":

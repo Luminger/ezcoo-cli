@@ -1,5 +1,6 @@
 """High-level KVM switch interface."""
 
+import re
 from pathlib import Path
 
 from .device import Device
@@ -18,13 +19,6 @@ class KVM:
     This class provides a type-safe, structured interface to KVM functionality
     that can be used both by the CLI and as a library.
 
-    Args:
-        device_path: Path to the serial device (e.g., /dev/ttyUSB0)
-        baudrate: Serial communication baud rate (default: 115200)
-        timeout: Read timeout in seconds (default: 1.0)
-        address: Device address (0-99). Use 0 for single device (default).
-                 For addresses 1-99, commands will be prefixed with Axx.
-
     Example:
         >>> from pathlib import Path
         >>> from ezcoo_cli.kvm import KVM
@@ -39,7 +33,22 @@ class KVM:
         >>> status = kvm.get_system_status()  # Sends A05EZSTA
     """
 
-    def __init__(self, device_path: Path, baudrate: int = 115200, timeout: float = 1.0, address: int = 0):
+    def __init__(
+        self,
+        device_path: Path,
+        baudrate: int = 115200,
+        timeout: float = 1.0,
+        address: int = 0,
+    ):
+        """Initialize the KVM interface.
+
+        Args:
+            device_path: Path to the serial device (e.g., /dev/ttyUSB0)
+            baudrate: Serial communication baud rate (default: 115200)
+            timeout: Read timeout in seconds (default: 1.0)
+            address: Device address (0-99). Use 0 for single device (default).
+                     For addresses 1-99, commands will be prefixed with Axx.
+        """
         self.device_path = device_path
         self.baudrate = baudrate
         self.timeout = timeout
@@ -83,95 +92,138 @@ class KVM:
         return f"A{self._address:02d}"
 
     def _parse_status_output(self, command: str, lines: list[str]) -> SystemStatus:
-        """Parse EZSTA command output into SystemStatus."""
+        """Parse EZSTA command output into SystemStatus.
+
+        Expected format:
+        - "System Address = XX           F/W Version : X.XX"
+        - "RS232                         : Baud Rate=115200bps ..."
+        """
         system_address: int | None = None
         firmware_version: str | None = None
         serial_config: SerialConfig | None = None
-        raw_response = "".join(lines)
+
+        # Pattern matches: System Address = <addr>  F/W Version : <version>
+        status_pattern = r"System\s+Address\s*=\s*(?P<address>\d+)\s+F/W\s+Version\s*:\s*(?P<version>[\d.]+)"
+        # Pattern matches: RS232 ... 115200bps or Baud Rate=115200bps
+        serial_pattern = r"(RS232.*115200bps|Baud\s+Rate\s*=\s*115200bps)"
 
         for line in lines:
             line = line.strip()
-            if "System Address" in line and "F/W Version" in line:
-                parts = line.split()
-                addr_idx = parts.index("Address") + 2 if "Address" in parts else -1
-                fw_idx = parts.index("Version") + 2 if "Version" in parts else -1
 
-                if addr_idx > 0 and addr_idx < len(parts):
-                    system_address = int(parts[addr_idx])
-                if fw_idx > 0 and fw_idx < len(parts):
-                    firmware_version = parts[fw_idx]
-            elif "RS232" in line and "Baud Rate" in line:
-                if "115200bps" in line:
-                    serial_config = SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1)
+            # Try to match system address and firmware version
+            match = re.search(status_pattern, line, re.IGNORECASE)
+            if match:
+                system_address = int(match.group("address"))
+                firmware_version = match.group("version")
+
+            # Try to match serial config
+            if re.search(serial_pattern, line, re.IGNORECASE):
+                serial_config = SerialConfig(
+                    baud_rate=115200,
+                    data_bits=8,
+                    parity="None",
+                    stop_bits=1,
+                )
 
         if system_address is None or not firmware_version or not serial_config:
             raise KVMError("Failed to parse system status")
 
         return SystemStatus(
             command=command,
-            raw_response=raw_response,
+            raw_response=lines,
             system_address=system_address,
             firmware_version=firmware_version,
             serial_config=serial_config,
         )
 
     def _parse_help_output(self, command: str, lines: list[str]) -> HelpInfo:
-        """Parse EZH command output into HelpInfo."""
+        """Parse EZH command output into HelpInfo.
+
+        Expected format:
+        - "F/W Version : X.XX"
+        - "=   COMMAND : Description"
+        """
         commands: list[Command] = []
         firmware_version: str | None = None
-        raw_response = "".join(lines)
+
+        # Pattern matches: F/W Version : <version>
+        version_pattern = r"F/W\s+Version\s*:\s*(?P<version>[\d.]+)"
+        # Pattern matches: =   COMMAND_NAME : Description
+        # Captures everything from EZ to the colon (trimmed)
+        command_pattern = r"^=\s+(?P<command>EZ[^:]+?)\s*:\s*(?P<description>.+)$"
 
         for line in lines:
             line = line.strip()
-            if "F/W Version" in line:
-                parts = line.split()
-                fw_idx = parts.index("Version") + 2 if "Version" in parts else -1
-                if fw_idx > 0 and fw_idx < len(parts):
-                    firmware_version = parts[fw_idx]
-            elif line.startswith("=   EZ"):
-                if ":" in line:
-                    cmd_part = line.split(":")[0].strip("= ")
-                    desc_part = line.split(":", 1)[1].strip("= ")
-                    commands.append(Command(command=cmd_part, description=desc_part))
+
+            # Try to match firmware version
+            version_match = re.search(version_pattern, line, re.IGNORECASE)
+            if version_match:
+                firmware_version = version_match.group("version")
+
+            # Try to match command entries
+            cmd_match = re.match(command_pattern, line)
+            if cmd_match:
+                cmd_name = cmd_match.group("command")
+                cmd_desc = cmd_match.group("description").strip()
+                commands.append(Command(command=cmd_name, description=cmd_desc))
 
         return HelpInfo(
             command=command,
-            raw_response=raw_response,
+            raw_response=lines,
             firmware_version=firmware_version,
             commands=commands,
             total_commands=len(commands),
         )
 
     def _parse_routing_output(self, command: str, lines: list[str]) -> OutputRouting:
-        """Parse EZG OUTx VS command output into OutputRouting."""
-        raw_response = "".join(lines)
+        """Parse EZG OUTx VS command output into OutputRouting.
+
+        Expected format: "OUTx VS y" where x is output number and y is input number.
+        """
+        # Pattern matches: OUT<output_num> VS <input_num>
+        pattern = r"OUT(?P<output>\d+)\s+VS\s+(?P<input>\d+)"
 
         for line in lines:
-            line = line.strip()
-            if "OUT" in line and "VS" in line:
-                parts = line.split()
-                if len(parts) >= 3:
-                    output_num = int(parts[0].replace("OUT", ""))
-                    input_num = int(parts[2])
-                    return OutputRouting(command=command, raw_response=raw_response, output=output_num, input=input_num)
+            match = re.search(pattern, line.strip())
+            if not match:
+                continue
+
+            output_num = int(match.group("output"))
+            input_num = int(match.group("input"))
+
+            return OutputRouting(
+                command=command,
+                raw_response=lines,
+                output=output_num,
+                input=input_num,
+            )
 
         raise KVMError("Failed to parse routing output")
 
     def _parse_stream_output(self, command: str, lines: list[str]) -> StreamStatus:
-        """Parse EZG OUTx STREAM command output into StreamStatus."""
-        raw_response = "".join(lines)
+        """Parse EZG OUTx STREAM command output into StreamStatus.
+
+        Expected format: "OUT <output_num> STREAM <status>" where status is ON or OFF.
+        """
+        # Pattern matches: OUT <output_num> STREAM <status>
+        pattern = r"OUT\s+(?P<output>\d+)\s+STREAM\s+(?P<status>ON|OFF)"
 
         for line in lines:
-            line = line.strip()
-            if "OUT" in line and "STREAM" in line:
-                parts = line.split()
-                if len(parts) >= 4:
-                    output_num = int(parts[1])
-                    status = parts[3].lower()
-                    enabled = parts[3].upper() == "ON"
-                    return StreamStatus(
-                        command=command, raw_response=raw_response, output=output_num, status=status, enabled=enabled
-                    )
+            match = re.search(pattern, line.strip(), re.IGNORECASE)
+            if not match:
+                continue
+
+            output_num = int(match.group("output"))
+            status_str = match.group("status").lower()
+            enabled = match.group("status").upper() == "ON"
+
+            return StreamStatus(
+                command=command,
+                raw_response=lines,
+                output=output_num,
+                status=status_str,
+                enabled=enabled,
+            )
 
         raise KVMError("Failed to parse stream output")
 

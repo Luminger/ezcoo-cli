@@ -23,11 +23,6 @@ class Device(contextlib.AbstractContextManager["Device"]):
 
     This class can be used both as a CLI tool and as a library component.
 
-    Args:
-        path: Path to the serial device (e.g., /dev/ttyUSB0)
-        baudrate: Serial communication baud rate (default: 115200)
-        timeout: Read timeout in seconds (default: 1)
-
     Example:
         >>> from ezcoo_cli.device import Device
         >>> from pathlib import Path
@@ -37,6 +32,13 @@ class Device(contextlib.AbstractContextManager["Device"]):
     """
 
     def __init__(self, path: Path, baudrate: int = 115200, timeout: float = 1.0) -> None:
+        """Initialize the Device.
+
+        Args:
+            path: Path to the serial device (e.g., /dev/ttyUSB0)
+            baudrate: Serial communication baud rate (default: 115200)
+            timeout: Read timeout in seconds (default: 1)
+        """
         self._path = path
         self._serial = serial.Serial()
         self._serial.port = str(path)

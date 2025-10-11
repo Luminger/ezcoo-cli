@@ -1,7 +1,6 @@
 """Data models for EZCOO KVM switch responses."""
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -12,7 +11,7 @@ class DeviceResponse:
     """
 
     command: str
-    raw_response: str
+    raw_response: list[str]
 
 
 @dataclass
@@ -46,8 +45,8 @@ class Command:
 class HelpInfo(DeviceResponse):
     """Device help information."""
 
-    firmware_version: Optional[str]
-    commands: List[Command]
+    firmware_version: str | None
+    commands: list[Command]
     total_commands: int
 
 
@@ -66,3 +65,12 @@ class StreamStatus(DeviceResponse):
     output: int
     status: str
     enabled: bool
+
+
+@dataclass
+class DiscoveredDevice:
+    """Information about a discovered device."""
+
+    address: int
+    firmware: str
+    system_address: int

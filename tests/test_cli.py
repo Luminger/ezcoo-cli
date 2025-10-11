@@ -103,7 +103,7 @@ def test_status_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -
 
     mock_status = SystemStatus(
         command="EZSTA",
-        raw_response="System Address : 00  F/W Version : 2.03\n",
+        raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
         serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
@@ -129,7 +129,7 @@ def test_help_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -> 
 
     mock_help = HelpInfo(
         command="EZH",
-        raw_response="F/W Version : 2.03\n=   EZH : Help\n=   EZSTA : Show Global System Status\n",
+        raw_response=["F/W Version : 2.03\n", "=   EZH : Help\n", "=   EZSTA : Show Global System Status\n"],
         firmware_version="2.03",
         commands=[
             Command(command="EZH", description="Help"),
@@ -183,7 +183,12 @@ def test_output_routing_command_json(mock_kvm_class: MagicMock, mock_device_file
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_routing = OutputRouting(command="EZG OUT1 VS", raw_response="OUT1 VS IN2\n", output=1, input=2)
+    mock_routing = OutputRouting(
+        command="EZG OUT1 VS",
+        raw_response=["OUT1 VS IN2\n"],
+        output=1,
+        input=2,
+    )
     mock_kvm.get_output_routing.return_value = mock_routing
 
     runner = CliRunner()
@@ -203,7 +208,11 @@ def test_output_stream_command_json(mock_kvm_class: MagicMock, mock_device_file:
     mock_kvm_class.return_value = mock_kvm
 
     mock_stream = StreamStatus(
-        command="EZG OUT1 STREAM", raw_response="OUT1 STREAM on\n", output=1, status="on", enabled=True
+        command="EZG OUT1 STREAM",
+        raw_response=["OUT1 STREAM on\n"],
+        output=1,
+        status="on",
+        enabled=True,
     )
     mock_kvm.get_stream_status.return_value = mock_stream
 
@@ -226,23 +235,30 @@ def test_output_format_consistency(mock_kvm_class: MagicMock, mock_device_file: 
 
     mock_kvm.get_system_status.return_value = SystemStatus(
         command="EZSTA",
-        raw_response="System Address : 00  F/W Version : 2.03\n",
+        raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
         serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
     )
     mock_kvm.get_help.return_value = HelpInfo(
         command="EZH",
-        raw_response="F/W Version : 2.03\n=   EZH : Help\n",
+        raw_response=["F/W Version : 2.03\n", "=   EZH : Help\n"],
         firmware_version="2.03",
         commands=[Command(command="EZH", description="Help")],
         total_commands=1,
     )
     mock_kvm.get_output_routing.return_value = OutputRouting(
-        command="EZG OUT1 VS", raw_response="OUT1 VS IN2\n", output=1, input=2
+        command="EZG OUT1 VS",
+        raw_response=["OUT1 VS IN2\n"],
+        output=1,
+        input=2,
     )
     mock_kvm.get_stream_status.return_value = StreamStatus(
-        command="EZG OUT1 STREAM", raw_response="OUT1 STREAM on\n", output=1, status="on", enabled=True
+        command="EZG OUT1 STREAM",
+        raw_response=["OUT1 STREAM on\n"],
+        output=1,
+        status="on",
+        enabled=True,
     )
 
     runner = CliRunner()
@@ -345,7 +361,7 @@ def test_system_discover_command(mock_kvm_class: MagicMock, mock_device_file: st
         # First call (address 0)
         status_0 = SystemStatus(
             command="EZSTA",
-            raw_response="System Address : 00  F/W Version : 2.03\n",
+            raw_response=["System Address : 00  F/W Version : 2.03\n"],
             system_address=0,
             firmware_version="2.03",
             serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
@@ -353,7 +369,7 @@ def test_system_discover_command(mock_kvm_class: MagicMock, mock_device_file: st
         # Second call (address 5)
         status_5 = SystemStatus(
             command="A05EZSTA",
-            raw_response="System Address : 05  F/W Version : 2.03\n",
+            raw_response=["System Address : 05  F/W Version : 2.03\n"],
             system_address=5,
             firmware_version="2.03",
             serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
@@ -381,7 +397,7 @@ def test_system_discover_json_output(mock_kvm_class: MagicMock, mock_device_file
 
     mock_status = SystemStatus(
         command="EZSTA",
-        raw_response="System Address : 00  F/W Version : 2.03\n",
+        raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
         serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
