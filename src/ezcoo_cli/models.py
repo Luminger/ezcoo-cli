@@ -5,6 +5,17 @@ from typing import List, Optional
 
 
 @dataclass
+class DeviceResponse:
+    """Base class for all device responses.
+
+    Contains the raw command and response for fallback display.
+    """
+
+    command: str
+    raw_response: str
+
+
+@dataclass
 class SerialConfig:
     """Serial port configuration."""
 
@@ -15,10 +26,10 @@ class SerialConfig:
 
 
 @dataclass
-class SystemStatus:
+class SystemStatus(DeviceResponse):
     """System status information."""
 
-    system_address: str
+    system_address: int
     firmware_version: str
     serial_config: SerialConfig
 
@@ -32,7 +43,7 @@ class Command:
 
 
 @dataclass
-class HelpInfo:
+class HelpInfo(DeviceResponse):
     """Device help information."""
 
     firmware_version: Optional[str]
@@ -41,7 +52,7 @@ class HelpInfo:
 
 
 @dataclass
-class OutputRouting:
+class OutputRouting(DeviceResponse):
     """Output routing information."""
 
     output: int
@@ -49,7 +60,7 @@ class OutputRouting:
 
 
 @dataclass
-class StreamStatus:
+class StreamStatus(DeviceResponse):
     """Output stream status."""
 
     output: int

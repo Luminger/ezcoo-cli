@@ -1,7 +1,6 @@
 """High-level KVM switch interface."""
 
 from pathlib import Path
-from typing import Optional
 
 from .device import Device
 from .models import Command, HelpInfo, OutputRouting, SerialConfig, StreamStatus, SystemStatus
@@ -9,12 +8,6 @@ from .models import Command, HelpInfo, OutputRouting, SerialConfig, StreamStatus
 
 class KVMError(Exception):
     """Base exception for KVM-related errors."""
-
-    pass
-
-
-class KVMCommandNotSupportedError(KVMError):
-    """Raised when a command is not supported by the device firmware."""
 
     pass
 
@@ -29,6 +22,8 @@ class KVM:
         device_path: Path to the serial device (e.g., /dev/ttyUSB0)
         baudrate: Serial communication baud rate (default: 115200)
         timeout: Read timeout in seconds (default: 1.0)
+        address: Device address (0-99). Use 0 for single device (default).
+                 For addresses 1-99, commands will be prefixed with Axx.
 
     Example:
         >>> from pathlib import Path
@@ -38,18 +33,61 @@ class KVM:
         >>> status = kvm.get_system_status()
         >>> print(f"Firmware: {status.firmware_version}")
         >>> kvm.switch_input(2)
+        >>>
+        >>> # For device at address 5
+        >>> kvm = KVM(Path("/dev/ttyUSB0"), address=5)
+        >>> status = kvm.get_system_status()  # Sends A05EZSTA
     """
 
-    def __init__(self, device_path: Path, baudrate: int = 115200, timeout: float = 1.0):
+    def __init__(self, device_path: Path, baudrate: int = 115200, timeout: float = 1.0, address: int = 0):
         self.device_path = device_path
         self.baudrate = baudrate
         self.timeout = timeout
+        self._address = address
 
-    def _parse_status_output(self, lines: list[str]) -> SystemStatus:
+        if not 0 <= address <= 99:
+            raise ValueError("Address must be between 0 and 99")
+
+    @property
+    def address(self) -> int:
+        """Get the current address this KVM instance is configured to use."""
+        return self._address
+
+    @address.setter
+    def address(self, value: int) -> None:
+        """Set the address this KVM instance should use for communication.
+
+        Args:
+            value: Address to use (0-99)
+
+        Raises:
+            ValueError: If address is invalid
+
+        Note:
+            This only changes which address this KVM instance uses for commands.
+            It does NOT change the device's actual address. Use set_device_address()
+            to change the device's address.
+        """
+        if not 0 <= value <= 99:
+            raise ValueError("Address must be between 0 and 99")
+        self._address = value
+
+    def _get_address_prefix(self) -> str:
+        """Get the address prefix for commands.
+
+        Returns:
+            Empty string for address 0, or Axx for addresses 1-99
+        """
+        if self._address == 0:
+            return ""
+        return f"A{self._address:02d}"
+
+    def _parse_status_output(self, command: str, lines: list[str]) -> SystemStatus:
         """Parse EZSTA command output into SystemStatus."""
-        system_address = None
-        firmware_version = None
-        serial_config = None
+        system_address: int | None = None
+        firmware_version: str | None = None
+        serial_config: SerialConfig | None = None
+        raw_response = "".join(lines)
 
         for line in lines:
             line = line.strip()
@@ -59,24 +97,29 @@ class KVM:
                 fw_idx = parts.index("Version") + 2 if "Version" in parts else -1
 
                 if addr_idx > 0 and addr_idx < len(parts):
-                    system_address = parts[addr_idx]
+                    system_address = int(parts[addr_idx])
                 if fw_idx > 0 and fw_idx < len(parts):
                     firmware_version = parts[fw_idx]
             elif "RS232" in line and "Baud Rate" in line:
                 if "115200bps" in line:
                     serial_config = SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1)
 
-        if not all([system_address, firmware_version, serial_config]):
+        if system_address is None or not firmware_version or not serial_config:
             raise KVMError("Failed to parse system status")
 
         return SystemStatus(
-            system_address=system_address, firmware_version=firmware_version, serial_config=serial_config
+            command=command,
+            raw_response=raw_response,
+            system_address=system_address,
+            firmware_version=firmware_version,
+            serial_config=serial_config,
         )
 
-    def _parse_help_output(self, lines: list[str]) -> HelpInfo:
+    def _parse_help_output(self, command: str, lines: list[str]) -> HelpInfo:
         """Parse EZH command output into HelpInfo."""
-        commands = []
-        firmware_version = None
+        commands: list[Command] = []
+        firmware_version: str | None = None
+        raw_response = "".join(lines)
 
         for line in lines:
             line = line.strip()
@@ -91,10 +134,18 @@ class KVM:
                     desc_part = line.split(":", 1)[1].strip("= ")
                     commands.append(Command(command=cmd_part, description=desc_part))
 
-        return HelpInfo(firmware_version=firmware_version, commands=commands, total_commands=len(commands))
+        return HelpInfo(
+            command=command,
+            raw_response=raw_response,
+            firmware_version=firmware_version,
+            commands=commands,
+            total_commands=len(commands),
+        )
 
-    def _parse_routing_output(self, lines: list[str]) -> OutputRouting:
+    def _parse_routing_output(self, command: str, lines: list[str]) -> OutputRouting:
         """Parse EZG OUTx VS command output into OutputRouting."""
+        raw_response = "".join(lines)
+
         for line in lines:
             line = line.strip()
             if "OUT" in line and "VS" in line:
@@ -102,12 +153,14 @@ class KVM:
                 if len(parts) >= 3:
                     output_num = int(parts[0].replace("OUT", ""))
                     input_num = int(parts[2])
-                    return OutputRouting(output=output_num, input=input_num)
+                    return OutputRouting(command=command, raw_response=raw_response, output=output_num, input=input_num)
 
         raise KVMError("Failed to parse routing output")
 
-    def _parse_stream_output(self, lines: list[str]) -> StreamStatus:
+    def _parse_stream_output(self, command: str, lines: list[str]) -> StreamStatus:
         """Parse EZG OUTx STREAM command output into StreamStatus."""
+        raw_response = "".join(lines)
+
         for line in lines:
             line = line.strip()
             if "OUT" in line and "STREAM" in line:
@@ -116,7 +169,9 @@ class KVM:
                     output_num = int(parts[1])
                     status = parts[3].lower()
                     enabled = parts[3].upper() == "ON"
-                    return StreamStatus(output=output_num, status=status, enabled=enabled)
+                    return StreamStatus(
+                        command=command, raw_response=raw_response, output=output_num, status=status, enabled=enabled
+                    )
 
         raise KVMError("Failed to parse stream output")
 
@@ -129,14 +184,16 @@ class KVM:
         Raises:
             KVMError: If the command fails or response cannot be parsed
         """
+        prefix = self._get_address_prefix()
+        command = f"{prefix}EZSTA"
         with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write("EZSTA")
+            device.write(command)
             lines = list(device.readlines())
 
             if not lines:
                 raise KVMError("No response from device")
 
-            return self._parse_status_output(lines)
+            return self._parse_status_output(command, lines)
 
     def get_help(self) -> HelpInfo:
         """Get device help information.
@@ -147,14 +204,16 @@ class KVM:
         Raises:
             KVMError: If the command fails or response cannot be parsed
         """
+        prefix = self._get_address_prefix()
+        command = f"{prefix}EZH"
         with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write("EZH")
+            device.write(command)
             lines = list(device.readlines())
 
             if not lines:
                 raise KVMError("No response from device")
 
-            return self._parse_help_output(lines)
+            return self._parse_help_output(command, lines)
 
     def switch_input(self, input_num: int, output_num: int = 1) -> None:
         """Switch an input to the specified output.
@@ -172,8 +231,9 @@ class KVM:
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
+        prefix = self._get_address_prefix()
         with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(f"EZS OUT{output_num} VS IN{input_num}")
+            device.write(f"{prefix}EZS OUT{output_num} VS IN{input_num}")
             # SET commands don't return responses, so no need to read
 
     def get_output_routing(self, output_num: int = 1) -> OutputRouting:
@@ -192,14 +252,16 @@ class KVM:
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
+        prefix = self._get_address_prefix()
+        command = f"{prefix}EZG OUT{output_num} VS"
         with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(f"EZG OUT{output_num} VS")
+            device.write(command)
             lines = list(device.readlines())
 
             if not lines:
                 raise KVMError("No response from device")
 
-            return self._parse_routing_output(lines)
+            return self._parse_routing_output(command, lines)
 
     def get_stream_status(self, output_num: int = 1) -> StreamStatus:
         """Get output stream status.
@@ -217,41 +279,40 @@ class KVM:
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
+        prefix = self._get_address_prefix()
+        command = f"{prefix}EZG OUT{output_num} STREAM"
         with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(f"EZG OUT{output_num} STREAM")
+            device.write(command)
             lines = list(device.readlines())
 
             if not lines:
                 raise KVMError("No response from device")
 
-            return self._parse_stream_output(lines)
+            return self._parse_stream_output(command, lines)
 
-    def get_input_signal_status(self, input_num: int) -> None:
-        """Get input signal status (not supported in F/W 2.03).
-
-        Args:
-            input_num: Input number to check (1-4)
-
-        Raises:
-            KVMCommandNotSupportedError: This command is not supported
-            ValueError: If input number is invalid
-        """
-        if not 1 <= input_num <= 4:
-            raise ValueError("Input number must be between 1 and 4")
-
-        raise KVMCommandNotSupportedError("Input signal status is not supported in firmware 2.03")
-
-    def get_edid_info(self, input_num: Optional[int] = None) -> None:
-        """Get EDID information (not supported in F/W 2.03).
+    def set_device_address(self, new_address: int) -> None:
+        """Set the device's address.
 
         Args:
-            input_num: Input number to check (1-4), or None for all
+            new_address: New address to set (0-99)
 
         Raises:
-            KVMCommandNotSupportedError: This command is not supported
-            ValueError: If input number is invalid
-        """
-        if input_num is not None and not 1 <= input_num <= 4:
-            raise ValueError("Input number must be between 1 and 4")
+            ValueError: If address is invalid
+            KVMError: If the command fails
 
-        raise KVMCommandNotSupportedError("EDID information is not supported in firmware 2.03")
+        Warning:
+            After changing the device's address, you must update this KVM instance's
+            address property to continue communicating with the device.
+
+        Example:
+            >>> kvm = KVM(Path("/dev/ttyUSB0"), address=0)
+            >>> kvm.set_device_address(5)
+            >>> kvm.address = 5  # Update instance to use new address
+        """
+        if not 0 <= new_address <= 99:
+            raise ValueError("Address must be between 0 and 99")
+
+        prefix = self._get_address_prefix()
+        with Device(self.device_path, self.baudrate, self.timeout) as device:
+            device.write(f"{prefix}EZS ADDR {new_address:02d}")
+            # SET commands don't return responses

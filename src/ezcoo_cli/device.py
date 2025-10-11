@@ -59,6 +59,22 @@ class Device(contextlib.AbstractContextManager["Device"]):
         if self._serial.is_open:
             self._serial.close()
 
+    @staticmethod
+    def validate_command(cmd: str) -> None:
+        """Validate that a command only contains safe characters.
+
+        Args:
+            cmd: Command string to validate
+
+        Raises:
+            DeviceError: If command contains invalid characters
+        """
+        # Only allow ASCII alphanumeric characters and regular spaces (not tabs, newlines, etc.)
+        if not all(c.isalnum() or c == " " for c in cmd):
+            raise DeviceError(
+                f"Command contains invalid characters. Only ASCII alphanumeric and spaces allowed: {cmd!r}"
+            )
+
     def write(self, cmd: str) -> None:
         """Write a command to the device.
 
@@ -66,14 +82,19 @@ class Device(contextlib.AbstractContextManager["Device"]):
             cmd: Command string to send to the device
 
         Raises:
-            DeviceError: If writing to device fails
+            DeviceError: If writing to device fails or command contains invalid characters
         """
         if not self._serial.is_open:
             raise DeviceError("Device is not open")
 
+        # Validate command before sending
+        self.validate_command(cmd)
+
         try:
             buffer = (cmd + "\n").encode("ascii")
             self._serial.write(buffer)
+        except UnicodeEncodeError as e:
+            raise DeviceError(f"Command contains non-ASCII characters: {e}") from e
         except serial.SerialException as e:
             raise DeviceError(f"Failed to write to device: {e}") from e
 
