@@ -68,8 +68,6 @@ def status(device: Path, address: int, format: str) -> None:
             case "pretty":
                 click.echo(f"System Address: {status_info.system_address:02d}")
                 click.echo(f"Firmware Version: {status_info.firmware_version}")
-                c = status_info.serial_config
-                click.echo(f"Serial Port: {c.baud_rate} baud, {c.data_bits}{c.parity[0]}{c.stop_bits}")
             case _:  # raw
                 click.echo("".join(status_info.raw_response), nl=False)
     except KVMError as e:

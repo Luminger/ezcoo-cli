@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .device import Device
-from .models import Command, HelpInfo, OutputRouting, SerialConfig, StreamStatus, SystemStatus
+from .models import Command, HelpInfo, OutputRouting, StreamStatus, SystemStatus
 
 
 class KVMError(Exception):
@@ -89,6 +89,7 @@ class KVM:
         """
         if self._address == 0:
             return ""
+
         return f"A{self._address:02d}"
 
     def _parse_status_output(self, command: str, lines: list[str]) -> SystemStatus:
@@ -96,16 +97,12 @@ class KVM:
 
         Expected format:
         - "System Address = XX           F/W Version : X.XX"
-        - "RS232                         : Baud Rate=115200bps ..."
         """
         system_address: int | None = None
         firmware_version: str | None = None
-        serial_config: SerialConfig | None = None
 
         # Pattern matches: System Address = <addr>  F/W Version : <version>
         status_pattern = r"System\s+Address\s*=\s*(?P<address>\d+)\s+F/W\s+Version\s*:\s*(?P<version>[\d.]+)"
-        # Pattern matches: RS232 ... 115200bps or Baud Rate=115200bps
-        serial_pattern = r"(RS232.*115200bps|Baud\s+Rate\s*=\s*115200bps)"
 
         for line in lines:
             line = line.strip()
@@ -116,16 +113,7 @@ class KVM:
                 system_address = int(match.group("address"))
                 firmware_version = match.group("version")
 
-            # Try to match serial config
-            if re.search(serial_pattern, line, re.IGNORECASE):
-                serial_config = SerialConfig(
-                    baud_rate=115200,
-                    data_bits=8,
-                    parity="None",
-                    stop_bits=1,
-                )
-
-        if system_address is None or not firmware_version or not serial_config:
+        if system_address is None or not firmware_version:
             raise KVMError("Failed to parse system status")
 
         return SystemStatus(
@@ -133,7 +121,6 @@ class KVM:
             raw_response=lines,
             system_address=system_address,
             firmware_version=firmware_version,
-            serial_config=serial_config,
         )
 
     def _parse_help_output(self, command: str, lines: list[str]) -> HelpInfo:

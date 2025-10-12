@@ -15,22 +15,11 @@ class DeviceResponse:
 
 
 @dataclass
-class SerialConfig:
-    """Serial port configuration."""
-
-    baud_rate: int
-    data_bits: int
-    parity: str
-    stop_bits: int
-
-
-@dataclass
 class SystemStatus(DeviceResponse):
     """System status information."""
 
     system_address: int
     firmware_version: str
-    serial_config: SerialConfig
 
 
 @dataclass

@@ -213,7 +213,6 @@ The high-level interface returns structured data using dataclasses:
 status = kvm.get_system_status()
 print(status.system_address)      # 0
 print(status.firmware_version)    # "2.03"
-print(status.serial_config.baud_rate)  # 115200
 
 # OutputRouting dataclass
 routing = kvm.get_output_routing()

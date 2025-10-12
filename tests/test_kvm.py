@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from ezcoo_cli.kvm import KVM
-from ezcoo_cli.models import HelpInfo, OutputRouting, SerialConfig, StreamStatus, SystemStatus
+from ezcoo_cli.models import HelpInfo, OutputRouting, StreamStatus, SystemStatus
 
 # KVM initialization tests
 
@@ -79,7 +79,6 @@ def test_get_system_status(reserial: Any, mock_device_path: Path) -> None:
     assert isinstance(status, SystemStatus)
     assert status.system_address is not None
     assert status.firmware_version is not None
-    assert isinstance(status.serial_config, SerialConfig)
 
 
 def test_get_help(reserial: Any, mock_device_path: Path) -> None:

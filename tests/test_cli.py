@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from ezcoo_cli.cli import main
-from ezcoo_cli.models import Command, HelpInfo, OutputRouting, SerialConfig, StreamStatus, SystemStatus
+from ezcoo_cli.models import Command, HelpInfo, OutputRouting, StreamStatus, SystemStatus
 
 
 @pytest.fixture
@@ -106,7 +106,6 @@ def test_status_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
-        serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
     )
     mock_kvm.get_system_status.return_value = mock_status
 
@@ -117,7 +116,6 @@ def test_status_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -
     data = json.loads(result.output)
     assert data["system_address"] == 0
     assert data["firmware_version"] == "2.03"
-    assert data["serial_config"]["baud_rate"] == 115200
 
 
 @patch("ezcoo_cli.cli.KVM")
@@ -238,7 +236,6 @@ def test_output_format_consistency(mock_kvm_class: MagicMock, mock_device_file: 
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
-        serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
     )
     mock_kvm.get_help.return_value = HelpInfo(
         command="EZH",
@@ -364,7 +361,6 @@ def test_system_discover_command(mock_kvm_class: MagicMock, mock_device_file: st
             raw_response=["System Address : 00  F/W Version : 2.03\n"],
             system_address=0,
             firmware_version="2.03",
-            serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
         )
         # Second call (address 5)
         status_5 = SystemStatus(
@@ -372,7 +368,6 @@ def test_system_discover_command(mock_kvm_class: MagicMock, mock_device_file: st
             raw_response=["System Address : 05  F/W Version : 2.03\n"],
             system_address=5,
             firmware_version="2.03",
-            serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
         )
         # Return different status based on which address was used
         for status in [status_0, status_5]:
@@ -400,7 +395,6 @@ def test_system_discover_json_output(mock_kvm_class: MagicMock, mock_device_file
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
         system_address=0,
         firmware_version="2.03",
-        serial_config=SerialConfig(baud_rate=115200, data_bits=8, parity="None", stop_bits=1),
     )
     mock_kvm.get_system_status.return_value = mock_status
 

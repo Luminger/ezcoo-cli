@@ -82,8 +82,6 @@ def test_kvm_system_status(reserial: Any, mock_device_path: Path) -> None:
     # Verify the parsed response
     assert status.system_address is not None
     assert status.firmware_version is not None
-    assert status.serial_config is not None
-    assert status.serial_config.baud_rate == 115200
 
 
 def test_kvm_help(reserial: Any, mock_device_path: Path) -> None:
