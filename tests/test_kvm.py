@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from ezcoo_cli.kvm import KVM
-from ezcoo_cli.models import HelpInfo, OutputRouting, StreamStatus, SystemStatus
+from ezcoo_cli.models import StreamState
 
 # KVM initialization tests
 
@@ -74,21 +74,19 @@ def test_get_stream_status_invalid_output(mock_device_path: Path) -> None:
 def test_get_system_status(reserial: Any, mock_device_path: Path) -> None:
     """Test get_system_status with recorded traffic."""
     kvm = KVM(mock_device_path)
-    status = kvm.get_system_status()
+    status_response = kvm.get_system_status()
 
-    assert isinstance(status, SystemStatus)
-    assert status.system_address is not None
-    assert status.firmware_version is not None
+    assert status_response.response.system_address is not None
+    assert status_response.response.firmware_version is not None
 
 
 def test_get_help(reserial: Any, mock_device_path: Path) -> None:
     """Test get_help with recorded traffic."""
     kvm = KVM(mock_device_path)
-    help_info = kvm.get_help()
+    help_response = kvm.get_help()
 
-    assert isinstance(help_info, HelpInfo)
-    assert len(help_info.commands) > 0
-    assert help_info.total_commands > 0
+    assert len(help_response.response.commands) > 0
+    assert help_response.response.total_commands > 0
 
 
 def test_switch_input_valid(reserial: Any, mock_device_path: Path) -> None:
@@ -103,22 +101,20 @@ def test_switch_input_valid(reserial: Any, mock_device_path: Path) -> None:
 def test_get_output_routing(reserial: Any, mock_device_path: Path) -> None:
     """Test get_output_routing with recorded traffic."""
     kvm = KVM(mock_device_path)
-    routing = kvm.get_output_routing()
+    routing_response = kvm.get_output_routing()
 
-    assert isinstance(routing, OutputRouting)
-    assert 1 <= routing.input <= 4
-    assert routing.output == 1
+    assert 1 <= routing_response.response.input <= 4
+    assert routing_response.response.output == 1
 
 
 def test_get_stream_status(reserial: Any, mock_device_path: Path) -> None:
     """Test get_stream_status with recorded traffic."""
     kvm = KVM(mock_device_path)
-    stream = kvm.get_stream_status()
+    stream_response = kvm.get_stream_status()
 
-    assert isinstance(stream, StreamStatus)
-    assert stream.output == 1
-    assert isinstance(stream.enabled, bool)
-    assert stream.status in ["on", "off"]
+    assert stream_response.response.output == 1
+    assert isinstance(stream_response.response.enabled, bool)
+    assert stream_response.response.status in [StreamState.ON, StreamState.OFF]
 
 
 # Address management tests
@@ -190,8 +186,8 @@ def test_set_device_address(reserial: Any, mock_device_path: Path) -> None:
     kvm = KVM(mock_device_path)
 
     # Read the original address from the device
-    status = kvm.get_system_status()
-    original_address = status.system_address
+    status_response = kvm.get_system_status()
+    original_address = status_response.response.system_address
     new_address = 5
 
     try:

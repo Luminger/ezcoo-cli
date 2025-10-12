@@ -7,6 +7,7 @@ import pytest
 
 from ezcoo_cli.device import Device, DeviceConnectionError
 from ezcoo_cli.kvm import KVM
+from ezcoo_cli.models import StreamState
 
 # Integration tests (uses reserial for record/replay)
 
@@ -77,24 +78,24 @@ def test_stream_status(reserial: Any, mock_device_path: Path) -> None:
 def test_kvm_system_status(reserial: Any, mock_device_path: Path) -> None:
     """Test KVM system status."""
     kvm = KVM(mock_device_path)
-    status = kvm.get_system_status()
+    status_response = kvm.get_system_status()
 
     # Verify the parsed response
-    assert status.system_address is not None
-    assert status.firmware_version is not None
+    assert status_response.response.system_address is not None
+    assert status_response.response.firmware_version is not None
 
 
 def test_kvm_help(reserial: Any, mock_device_path: Path) -> None:
     """Test KVM help."""
     kvm = KVM(mock_device_path)
-    help_info = kvm.get_help()
+    help_response = kvm.get_help()
 
     # Verify the parsed response
-    assert help_info.total_commands > 0
-    assert len(help_info.commands) > 0
+    assert help_response.response.total_commands > 0
+    assert len(help_response.response.commands) > 0
 
     # Check for expected commands
-    command_names = [cmd.command for cmd in help_info.commands]
+    command_names = [cmd.command for cmd in help_response.response.commands]
     expected_commands = ["EZH", "EZSTA", "EZS OUTx VS INy"]
     for expected in expected_commands:
         assert any(expected in cmd for cmd in command_names)
@@ -112,22 +113,22 @@ def test_kvm_switching(reserial: Any, mock_device_path: Path) -> None:
 def test_kvm_routing(reserial: Any, mock_device_path: Path) -> None:
     """Test KVM routing query."""
     kvm = KVM(mock_device_path)
-    routing = kvm.get_output_routing()
+    routing_response = kvm.get_output_routing()
 
     # Verify the parsed response
-    assert 1 <= routing.input <= 4
-    assert routing.output == 1
+    assert 1 <= routing_response.response.input <= 4
+    assert routing_response.response.output == 1
 
 
 def test_kvm_stream(reserial: Any, mock_device_path: Path) -> None:
     """Test KVM stream status."""
     kvm = KVM(mock_device_path)
-    stream = kvm.get_stream_status()
+    stream_response = kvm.get_stream_status()
 
     # Verify the parsed response
-    assert stream.output == 1
-    assert isinstance(stream.enabled, bool)
-    assert stream.status in ["on", "off"]
+    assert stream_response.response.output == 1
+    assert isinstance(stream_response.response.enabled, bool)
+    assert stream_response.response.status in [StreamState.ON, StreamState.OFF]
 
 
 # Error scenario tests

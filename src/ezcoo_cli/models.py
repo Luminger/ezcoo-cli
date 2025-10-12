@@ -1,21 +1,33 @@
 """Data models for EZCOO KVM switch responses."""
 
 from dataclasses import dataclass
+from enum import Enum
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
+
+class StreamState(str, Enum):
+    """Stream status state."""
+
+    ON = "on"
+    OFF = "off"
 
 
 @dataclass
-class DeviceResponse:
-    """Base class for all device responses.
+class KVMResponse(Generic[T]):
+    """Generic response wrapper for KVM commands.
 
-    Contains the raw command and response for fallback display.
+    Contains the raw command, response lines, and parsed response.
     """
 
     command: str
     raw_response: list[str]
+    response: T
 
 
 @dataclass
-class SystemStatus(DeviceResponse):
+class SystemStatus:
     """System status information."""
 
     system_address: int
@@ -31,7 +43,7 @@ class Command:
 
 
 @dataclass
-class HelpInfo(DeviceResponse):
+class HelpInfo:
     """Device help information."""
 
     firmware_version: str | None
@@ -40,7 +52,7 @@ class HelpInfo(DeviceResponse):
 
 
 @dataclass
-class OutputRouting(DeviceResponse):
+class OutputRouting:
     """Output routing information."""
 
     output: int
@@ -48,11 +60,11 @@ class OutputRouting(DeviceResponse):
 
 
 @dataclass
-class StreamStatus(DeviceResponse):
+class StreamStatus:
     """Output stream status."""
 
     output: int
-    status: str
+    status: StreamState
     enabled: bool
 
 

@@ -60,16 +60,16 @@ def status(device: Path, address: int, format: str) -> None:
     """Show global system status."""
     try:
         kvm = KVM(device, address=address)
-        status_info = kvm.get_system_status()
+        status_response = kvm.get_system_status()
 
         match format:
             case "json":
-                click.echo(json.dumps(asdict(status_info), indent=2))
+                click.echo(json.dumps(asdict(status_response), indent=2))
             case "pretty":
-                click.echo(f"System Address: {status_info.system_address:02d}")
-                click.echo(f"Firmware Version: {status_info.firmware_version}")
+                click.echo(f"System Address: {status_response.response.system_address:02d}")
+                click.echo(f"Firmware Version: {status_response.response.firmware_version}")
             case _:  # raw
-                click.echo("".join(status_info.raw_response), nl=False)
+                click.echo("".join(status_response.raw_response), nl=False)
     except KVMError as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -83,24 +83,24 @@ def help(device: Path, address: int, format: str) -> None:
     """Get help information from the device."""
     try:
         kvm = KVM(device, address=address)
-        help_info = kvm.get_help()
+        help_response = kvm.get_help()
 
         match format:
             case "json":
-                click.echo(json.dumps(asdict(help_info), indent=2))
+                click.echo(json.dumps(asdict(help_response), indent=2))
             case "pretty":
                 click.echo("EZCOO Device Help Summary:")
                 click.echo("=" * 40)
 
-                if help_info.firmware_version:
-                    click.echo(f"Firmware Version: {help_info.firmware_version}")
+                if help_response.response.firmware_version:
+                    click.echo(f"Firmware Version: {help_response.response.firmware_version}")
 
-                for cmd in help_info.commands:
+                for cmd in help_response.response.commands:
                     click.echo(f"  {cmd.command}: {cmd.description}")
 
-                click.echo(f"\nTotal commands available: {help_info.total_commands}")
+                click.echo(f"\nTotal commands available: {help_response.response.total_commands}")
             case _:  # raw
-                click.echo("".join(help_info.raw_response), nl=False)
+                click.echo("".join(help_response.raw_response), nl=False)
     except KVMError as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -156,15 +156,17 @@ def routing(device: Path, address: int, output: int, format: str) -> None:
     """Get current output video routing."""
     try:
         kvm = KVM(device, address=address)
-        routing_info = kvm.get_output_routing(output)
+        routing_response = kvm.get_output_routing(output)
 
         match format:
             case "json":
-                click.echo(json.dumps(asdict(routing_info), indent=2))
+                click.echo(json.dumps(asdict(routing_response), indent=2))
             case "pretty":
-                click.echo(f"Output {routing_info.output} is connected to Input {routing_info.input}")
+                click.echo(
+                    f"Output {routing_response.response.output} is connected to Input {routing_response.response.input}"
+                )
             case _:  # raw
-                click.echo("".join(routing_info.raw_response), nl=False)
+                click.echo("".join(routing_response.raw_response), nl=False)
     except (KVMError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -184,15 +186,15 @@ def stream(device: Path, address: int, output: int, format: str) -> None:
     """Get output stream status."""
     try:
         kvm = KVM(device, address=address)
-        stream_info = kvm.get_stream_status(output)
+        stream_response = kvm.get_stream_status(output)
 
         match format:
             case "json":
-                click.echo(json.dumps(asdict(stream_info), indent=2))
+                click.echo(json.dumps(asdict(stream_response), indent=2))
             case "pretty":
-                click.echo(f"Output {stream_info.output} stream is {stream_info.status}")
+                click.echo(f"Output {stream_response.response.output} stream is {stream_response.response.status}")
             case _:  # raw
-                click.echo("".join(stream_info.raw_response), nl=False)
+                click.echo("".join(stream_response.raw_response), nl=False)
     except (KVMError, ValueError) as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
@@ -262,12 +264,12 @@ def discover(device: Path, start: int, end: int, format: str) -> None:
                 found_devices.append(
                     DiscoveredDevice(
                         address=addr,
-                        firmware=status.firmware_version,
-                        system_address=status.system_address,
+                        firmware=status.response.firmware_version,
+                        system_address=status.response.system_address,
                     )
                 )
                 if format != "json":
-                    click.echo(f"Found device at address {addr} (firmware: {status.firmware_version})")
+                    click.echo(f"Found device at address {addr} (firmware: {status.response.firmware_version})")
             except (KVMError, Exception):
                 # No device at this address
                 continue

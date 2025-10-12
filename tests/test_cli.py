@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from ezcoo_cli.cli import main
-from ezcoo_cli.models import Command, HelpInfo, OutputRouting, StreamStatus, SystemStatus
+from ezcoo_cli.models import Command, HelpInfo, KVMResponse, OutputRouting, StreamState, StreamStatus, SystemStatus
 
 
 @pytest.fixture
@@ -101,11 +101,13 @@ def test_status_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_status = SystemStatus(
+    mock_status = KVMResponse(
         command="EZSTA",
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
-        system_address=0,
-        firmware_version="2.03",
+        response=SystemStatus(
+            system_address=0,
+            firmware_version="2.03",
+        ),
     )
     mock_kvm.get_system_status.return_value = mock_status
 
@@ -114,8 +116,8 @@ def test_status_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -
 
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert data["system_address"] == 0
-    assert data["firmware_version"] == "2.03"
+    assert data["response"]["system_address"] == 0
+    assert data["response"]["firmware_version"] == "2.03"
 
 
 @patch("ezcoo_cli.cli.KVM")
@@ -125,15 +127,17 @@ def test_help_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -> 
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_help = HelpInfo(
+    mock_help = KVMResponse(
         command="EZH",
         raw_response=["F/W Version : 2.03\n", "=   EZH : Help\n", "=   EZSTA : Show Global System Status\n"],
-        firmware_version="2.03",
-        commands=[
-            Command(command="EZH", description="Help"),
-            Command(command="EZSTA", description="Show Global System Status"),
-        ],
-        total_commands=2,
+        response=HelpInfo(
+            firmware_version="2.03",
+            commands=[
+                Command(command="EZH", description="Help"),
+                Command(command="EZSTA", description="Show Global System Status"),
+            ],
+            total_commands=2,
+        ),
     )
     mock_kvm.get_help.return_value = mock_help
 
@@ -142,8 +146,8 @@ def test_help_command_json(mock_kvm_class: MagicMock, mock_device_file: str) -> 
 
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert data["total_commands"] == 2
-    assert len(data["commands"]) == 2
+    assert data["response"]["total_commands"] == 2
+    assert len(data["response"]["commands"]) == 2
 
 
 @patch("ezcoo_cli.cli.KVM")
@@ -181,11 +185,13 @@ def test_output_routing_command_json(mock_kvm_class: MagicMock, mock_device_file
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_routing = OutputRouting(
+    mock_routing = KVMResponse(
         command="EZG OUT1 VS",
         raw_response=["OUT1 VS IN2\n"],
-        output=1,
-        input=2,
+        response=OutputRouting(
+            output=1,
+            input=2,
+        ),
     )
     mock_kvm.get_output_routing.return_value = mock_routing
 
@@ -194,8 +200,8 @@ def test_output_routing_command_json(mock_kvm_class: MagicMock, mock_device_file
 
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert data["output"] == 1
-    assert data["input"] == 2
+    assert data["response"]["output"] == 1
+    assert data["response"]["input"] == 2
 
 
 @patch("ezcoo_cli.cli.KVM")
@@ -205,12 +211,14 @@ def test_output_stream_command_json(mock_kvm_class: MagicMock, mock_device_file:
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_stream = StreamStatus(
+    mock_stream = KVMResponse(
         command="EZG OUT1 STREAM",
         raw_response=["OUT1 STREAM on\n"],
-        output=1,
-        status="on",
-        enabled=True,
+        response=StreamStatus(
+            output=1,
+            status=StreamState.ON,
+            enabled=True,
+        ),
     )
     mock_kvm.get_stream_status.return_value = mock_stream
 
@@ -219,9 +227,9 @@ def test_output_stream_command_json(mock_kvm_class: MagicMock, mock_device_file:
 
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert data["output"] == 1
-    assert data["status"] == "on"
-    assert data["enabled"] is True
+    assert data["response"]["output"] == 1
+    assert data["response"]["status"] == StreamState.ON.value
+    assert data["response"]["enabled"] is True
 
 
 @patch("ezcoo_cli.cli.KVM")
@@ -231,31 +239,39 @@ def test_output_format_consistency(mock_kvm_class: MagicMock, mock_device_file: 
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_kvm.get_system_status.return_value = SystemStatus(
+    mock_kvm.get_system_status.return_value = KVMResponse(
         command="EZSTA",
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
-        system_address=0,
-        firmware_version="2.03",
+        response=SystemStatus(
+            system_address=0,
+            firmware_version="2.03",
+        ),
     )
-    mock_kvm.get_help.return_value = HelpInfo(
+    mock_kvm.get_help.return_value = KVMResponse(
         command="EZH",
         raw_response=["F/W Version : 2.03\n", "=   EZH : Help\n"],
-        firmware_version="2.03",
-        commands=[Command(command="EZH", description="Help")],
-        total_commands=1,
+        response=HelpInfo(
+            firmware_version="2.03",
+            commands=[Command(command="EZH", description="Help")],
+            total_commands=1,
+        ),
     )
-    mock_kvm.get_output_routing.return_value = OutputRouting(
+    mock_kvm.get_output_routing.return_value = KVMResponse(
         command="EZG OUT1 VS",
         raw_response=["OUT1 VS IN2\n"],
-        output=1,
-        input=2,
+        response=OutputRouting(
+            output=1,
+            input=2,
+        ),
     )
-    mock_kvm.get_stream_status.return_value = StreamStatus(
+    mock_kvm.get_stream_status.return_value = KVMResponse(
         command="EZG OUT1 STREAM",
         raw_response=["OUT1 STREAM on\n"],
-        output=1,
-        status="on",
-        enabled=True,
+        response=StreamStatus(
+            output=1,
+            status=StreamState.ON,
+            enabled=True,
+        ),
     )
 
     runner = CliRunner()
@@ -356,18 +372,22 @@ def test_system_discover_command(mock_kvm_class: MagicMock, mock_device_file: st
     # Mock successful responses for addresses 0 and 5
     def mock_get_system_status_side_effect():
         # First call (address 0)
-        status_0 = SystemStatus(
+        status_0 = KVMResponse(
             command="EZSTA",
             raw_response=["System Address : 00  F/W Version : 2.03\n"],
-            system_address=0,
-            firmware_version="2.03",
+            response=SystemStatus(
+                system_address=0,
+                firmware_version="2.03",
+            ),
         )
         # Second call (address 5)
-        status_5 = SystemStatus(
+        status_5 = KVMResponse(
             command="A05EZSTA",
             raw_response=["System Address : 05  F/W Version : 2.03\n"],
-            system_address=5,
-            firmware_version="2.03",
+            response=SystemStatus(
+                system_address=5,
+                firmware_version="2.03",
+            ),
         )
         # Return different status based on which address was used
         for status in [status_0, status_5]:
@@ -390,11 +410,13 @@ def test_system_discover_json_output(mock_kvm_class: MagicMock, mock_device_file
     mock_kvm = Mock()
     mock_kvm_class.return_value = mock_kvm
 
-    mock_status = SystemStatus(
+    mock_status = KVMResponse(
         command="EZSTA",
         raw_response=["System Address : 00  F/W Version : 2.03\n"],
-        system_address=0,
-        firmware_version="2.03",
+        response=SystemStatus(
+            system_address=0,
+            firmware_version="2.03",
+        ),
     )
     mock_kvm.get_system_status.return_value = mock_status
 

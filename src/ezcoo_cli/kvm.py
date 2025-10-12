@@ -1,10 +1,14 @@
 """High-level KVM switch interface."""
 
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar, overload
 
 from .device import Device
-from .models import Command, HelpInfo, OutputRouting, StreamStatus, SystemStatus
+from .models import Command, HelpInfo, KVMResponse, OutputRouting, StreamState, StreamStatus, SystemStatus
+
+T = TypeVar("T")
 
 
 class KVMError(Exception):
@@ -79,28 +83,72 @@ class KVM:
         """
         if not 0 <= value <= 99:
             raise ValueError("Address must be between 0 and 99")
+
         self._address = value
 
-    def _get_address_prefix(self) -> str:
-        """Get the address prefix for commands.
+    def _build_command(self, command: str) -> str:
+        """Build a command with address prefix.
+
+        Args:
+            command: The base command (e.g., "EZSTA", "EZH")
 
         Returns:
-            Empty string for address 0, or Axx for addresses 1-99
+            Command with address prefix if needed
         """
         if self._address == 0:
-            return ""
+            return command
+        return f"A{self._address:02d}{command}"
 
-        return f"A{self._address:02d}"
+    @overload
+    def _execute_command(
+        self,
+        command: str,
+        parser: Callable[[list[str]], T],
+    ) -> KVMResponse[T]: ...
 
-    def _parse_status_output(self, command: str, lines: list[str]) -> SystemStatus:
+    @overload
+    def _execute_command(
+        self,
+        command: str,
+        parser: None,
+    ) -> None: ...
+
+    def _execute_command(
+        self,
+        command: str,
+        parser: Callable[[list[str]], T] | None = None,
+    ) -> KVMResponse[T] | None:
+        """Execute a command on the device and optionally parse the response.
+
+        Args:
+            command: The full command to execute (with address prefix already applied)
+            parser: Optional function to parse the response lines into a typed result.
+                   If None, no response is expected and None is returned.
+
+        Returns:
+            KVMResponse[T] containing the parsed result if parser is provided, None otherwise
+
+        Raises:
+            KVMError: If parser is provided but no response received, or if parsing fails
+        """
+        with Device(self.device_path, self.baudrate, self.timeout) as device:
+            device.write(command)
+            if parser is None:
+                return None
+            lines = list(device.readlines())
+
+        if not lines:
+            raise KVMError("No response from device")
+
+        parsed_response = parser(lines)
+        return KVMResponse(command=command, raw_response=lines, response=parsed_response)
+
+    def _parse_status_output(self, lines: list[str]) -> SystemStatus:
         """Parse EZSTA command output into SystemStatus.
 
         Expected format:
         - "System Address = XX           F/W Version : X.XX"
         """
-        system_address: int | None = None
-        firmware_version: str | None = None
-
         # Pattern matches: System Address = <addr>  F/W Version : <version>
         status_pattern = r"System\s+Address\s*=\s*(?P<address>\d+)\s+F/W\s+Version\s*:\s*(?P<version>[\d.]+)"
 
@@ -109,21 +157,20 @@ class KVM:
 
             # Try to match system address and firmware version
             match = re.search(status_pattern, line, re.IGNORECASE)
-            if match:
-                system_address = int(match.group("address"))
-                firmware_version = match.group("version")
+            if not match:
+                continue
 
-        if system_address is None or not firmware_version:
-            raise KVMError("Failed to parse system status")
+            system_address = int(match.group("address"))
+            firmware_version = match.group("version")
 
-        return SystemStatus(
-            command=command,
-            raw_response=lines,
-            system_address=system_address,
-            firmware_version=firmware_version,
-        )
+            return SystemStatus(
+                system_address=system_address,
+                firmware_version=firmware_version,
+            )
 
-    def _parse_help_output(self, command: str, lines: list[str]) -> HelpInfo:
+        raise KVMError("Failed to parse system status")
+
+    def _parse_help_output(self, lines: list[str]) -> HelpInfo:
         """Parse EZH command output into HelpInfo.
 
         Expected format:
@@ -155,14 +202,12 @@ class KVM:
                 commands.append(Command(command=cmd_name, description=cmd_desc))
 
         return HelpInfo(
-            command=command,
-            raw_response=lines,
             firmware_version=firmware_version,
             commands=commands,
             total_commands=len(commands),
         )
 
-    def _parse_routing_output(self, command: str, lines: list[str]) -> OutputRouting:
+    def _parse_routing_output(self, lines: list[str]) -> OutputRouting:
         """Parse EZG OUTx VS command output into OutputRouting.
 
         Expected format: "OUTx VS y" where x is output number and y is input number.
@@ -179,15 +224,13 @@ class KVM:
             input_num = int(match.group("input"))
 
             return OutputRouting(
-                command=command,
-                raw_response=lines,
                 output=output_num,
                 input=input_num,
             )
 
         raise KVMError("Failed to parse routing output")
 
-    def _parse_stream_output(self, command: str, lines: list[str]) -> StreamStatus:
+    def _parse_stream_output(self, lines: list[str]) -> StreamStatus:
         """Parse EZG OUTx STREAM command output into StreamStatus.
 
         Expected format: "OUT <output_num> STREAM <status>" where status is ON or OFF.
@@ -201,58 +244,41 @@ class KVM:
                 continue
 
             output_num = int(match.group("output"))
-            status_str = match.group("status").lower()
-            enabled = match.group("status").upper() == "ON"
+            status_upper = match.group("status").upper()
+            enabled = status_upper == "ON"
+            status = StreamState.ON if enabled else StreamState.OFF
 
             return StreamStatus(
-                command=command,
-                raw_response=lines,
                 output=output_num,
-                status=status_str,
+                status=status,
                 enabled=enabled,
             )
 
         raise KVMError("Failed to parse stream output")
 
-    def get_system_status(self) -> SystemStatus:
+    def get_system_status(self) -> KVMResponse[SystemStatus]:
         """Get system status information.
 
         Returns:
-            SystemStatus with device information
+            KVMResponse containing SystemStatus with device information
 
         Raises:
             KVMError: If the command fails or response cannot be parsed
         """
-        prefix = self._get_address_prefix()
-        command = f"{prefix}EZSTA"
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(command)
-            lines = list(device.readlines())
+        command = self._build_command("EZSTA")
+        return self._execute_command(command, self._parse_status_output)
 
-            if not lines:
-                raise KVMError("No response from device")
-
-            return self._parse_status_output(command, lines)
-
-    def get_help(self) -> HelpInfo:
+    def get_help(self) -> KVMResponse[HelpInfo]:
         """Get device help information.
 
         Returns:
-            HelpInfo with available commands
+            KVMResponse containing HelpInfo with available commands
 
         Raises:
             KVMError: If the command fails or response cannot be parsed
         """
-        prefix = self._get_address_prefix()
-        command = f"{prefix}EZH"
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(command)
-            lines = list(device.readlines())
-
-            if not lines:
-                raise KVMError("No response from device")
-
-            return self._parse_help_output(command, lines)
+        command = self._build_command("EZH")
+        return self._execute_command(command, self._parse_help_output)
 
     def switch_input(self, input_num: int, output_num: int = 1) -> None:
         """Switch an input to the specified output.
@@ -267,22 +293,21 @@ class KVM:
         """
         if not 1 <= input_num <= 4:
             raise ValueError("Input number must be between 1 and 4")
+
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
-        prefix = self._get_address_prefix()
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(f"{prefix}EZS OUT{output_num} VS IN{input_num}")
-            # SET commands don't return responses, so no need to read
+        command = self._build_command(f"EZS OUT{output_num} VS IN{input_num}")
+        self._execute_command(command, parser=None)
 
-    def get_output_routing(self, output_num: int = 1) -> OutputRouting:
+    def get_output_routing(self, output_num: int = 1) -> KVMResponse[OutputRouting]:
         """Get current output routing.
 
         Args:
             output_num: Output number to query (default: 1, only 1 supported)
 
         Returns:
-            OutputRouting with current connection
+            KVMResponse containing OutputRouting with current connection
 
         Raises:
             KVMError: If the command fails or response cannot be parsed
@@ -291,25 +316,17 @@ class KVM:
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
-        prefix = self._get_address_prefix()
-        command = f"{prefix}EZG OUT{output_num} VS"
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(command)
-            lines = list(device.readlines())
+        command = self._build_command(f"EZG OUT{output_num} VS")
+        return self._execute_command(command, self._parse_routing_output)
 
-            if not lines:
-                raise KVMError("No response from device")
-
-            return self._parse_routing_output(command, lines)
-
-    def get_stream_status(self, output_num: int = 1) -> StreamStatus:
+    def get_stream_status(self, output_num: int = 1) -> KVMResponse[StreamStatus]:
         """Get output stream status.
 
         Args:
             output_num: Output number to query (default: 1, only 1 supported)
 
         Returns:
-            StreamStatus with current stream state
+            KVMResponse containing StreamStatus with current stream state
 
         Raises:
             KVMError: If the command fails or response cannot be parsed
@@ -318,16 +335,8 @@ class KVM:
         if output_num != 1:
             raise ValueError("Only output 1 is supported")
 
-        prefix = self._get_address_prefix()
-        command = f"{prefix}EZG OUT{output_num} STREAM"
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(command)
-            lines = list(device.readlines())
-
-            if not lines:
-                raise KVMError("No response from device")
-
-            return self._parse_stream_output(command, lines)
+        command = self._build_command(f"EZG OUT{output_num} STREAM")
+        return self._execute_command(command, self._parse_stream_output)
 
     def set_device_address(self, new_address: int) -> None:
         """Set the device's address.
@@ -351,7 +360,5 @@ class KVM:
         if not 0 <= new_address <= 99:
             raise ValueError("Address must be between 0 and 99")
 
-        prefix = self._get_address_prefix()
-        with Device(self.device_path, self.baudrate, self.timeout) as device:
-            device.write(f"{prefix}EZS ADDR {new_address:02d}")
-            # SET commands don't return responses
+        command = self._build_command(f"EZS ADDR {new_address:02d}")
+        self._execute_command(command, parser=None)
