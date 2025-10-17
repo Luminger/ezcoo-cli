@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "A tool to control EZCOO KVM switches via the serial interface"
 authors = ["Simon Brakhane <simon@brakhane.net>"]
 readme = "README.md"
-license = "Apache-2.0"
+license = "GPL-3.0-or-later"
+dependencies = ["pyserial>=3.5", "click>=8.1.3"]
 
 [tool.poetry.scripts]
 ezcoo-cli = "ezcoo_cli.console:main"
