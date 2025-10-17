@@ -1,0 +1,42 @@
+name: Run linter and tests
+description: Runs the format check, linter, type check and tests
+
+runs:
+  using: composite
+  steps:
+    - name: Disable initramfs update
+      shell: bash
+      run: sudo sed -i 's/yes/no/g' /etc/initramfs-tools/update-initramfs.conf
+
+    - name: Disable man-db update
+      shell: bash
+      run: sudo rm -f /var/lib/man-db/auto-update
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
+    - name: Install uv
+      shell: bash
+      run: python3 -m pip install uv
+
+    - name: Setup project
+      shell: bash
+      run: uv sync --group dev
+      env:
+        UV_PROJECT_ENVIRONMENT: .venv
+
+    - name: Run ruff check
+      uses: astral-sh/ruff-action@v3
+      with:
+        args: "check"
+
+    - name: Run ruff format check
+      uses: astral-sh/ruff-action@v3
+      with:
+        args: "format --check"
+
+    - name: Run tests
+      shell: bash
+      run: uv run pytest tests/ --replay -v
