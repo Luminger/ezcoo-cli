@@ -1,27 +1,37 @@
-[tool.poetry]
+[project]
 name = "ezcoo-cli"
 version = "0.1.0"
 description = "A tool to control EZCOO KVM switches via the serial interface"
-authors = ["Simon Brakhane <simon@brakhane.net>"]
+authors = [{ name = "Simon Brakhane", email = "simon@brakhane.net" }]
+requires-python = ">=3.8"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-dependencies = ["pyserial>=3.5", "click>=8.1.3"]
+dependencies = ["pyserial>=3.5", "click>=8.1.3", "attrs>=23.1.0"]
 
-[tool.poetry.scripts]
+[project.scripts]
 ezcoo-cli = "ezcoo_cli.console:main"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pyserial = "^3.5"
-click = "^8.1.3"
-attrs = "^23.1.0"
-
-[tool.poetry.group.dev.dependencies]
-flake8 = "^6.0.0"
-flake8-black = "^0.3.6"
-flake8-import-order = "^0.18.2"
-mypy = "^1.3.0"
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+
+lint.select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "C90", # mccabe complexity
+  "B",   # flake8-bugbear (equivalent to BLK)
+]
+
+[dependency-groups]
+dev = ["ruff>=0.13.2"]
+
+# Ignore the same rules as flake8
+# ignore = [
+#     "E203",  # whitespace before ':'
+#     "W503",  # line break before binary operator
+# ]
