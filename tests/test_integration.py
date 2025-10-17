@@ -141,7 +141,7 @@ def test_device_connection_error() -> None:
             pass
 
 
-def test_kvm_error_handling(reserial: Any, mock_device_path: Path) -> None:
+def test_kvm_error_handling(mock_device_path: Path) -> None:
     """Test KVM error handling."""
     kvm = KVM(mock_device_path)
 
@@ -158,6 +158,3 @@ def test_kvm_error_handling(reserial: Any, mock_device_path: Path) -> None:
 
     with pytest.raises(ValueError):
         kvm.get_stream_status(2)
-
-
-# Performance tests
