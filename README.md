@@ -2,9 +2,11 @@
 
 A tool to control EZCOO KVM switches via the serial interface.
 
-**Tested Devices:** EZCOO EZ-SW41HA-KVMU3L with firmware version 2.03 (should work with EZ-SW41HA-KVMU3P as well)
+**Tested Devices:** EZCOO EZ-SW41HA-KVMU3L with firmware version 2.03 (should be equal to EZ-SW41HA-KVMU3P)
 
 ## Installation
+
+### From PyPI
 
 Install using uv:
 
@@ -12,10 +14,22 @@ Install using uv:
 uv add ezcoo-cli
 ```
 
-Or install from source:
+### From AUR (Arch Linux)
+
+Install from the Arch User Repository:
 
 ```bash
-git clone <repository-url>
+yay -S ezcoo-cli
+# or
+paru -S ezcoo-cli
+```
+
+AUR package: https://aur.archlinux.org/packages/ezcoo-cli
+
+### From Source
+
+```bash
+git clone https://github.com/Luminger/ezcoo-cli
 cd ezcoo-cli
 uv sync
 ```
@@ -24,53 +38,56 @@ uv sync
 
 The CLI provides commands to control your EZCOO KVM switch through a serial connection.
 
-### Output Formats
+### KVM Switching
 
-> [!IMPORTANT]
-> Most query commands support multiple output formats using the `--format` (or `-f`) flag.
-
-**Available output formats:**
-- `pretty` - Human-readable formatted output (default)
-- `json` - Machine-readable JSON output
-- `raw` - Raw device response
-
-**Commands that support the format flag:**
-- `ezcoo-cli status` - System status information
-- `ezcoo-cli help` - Device help information
-- `ezcoo-cli output routing` - Output routing information
-- `ezcoo-cli output stream` - Stream status information
-- `ezcoo-cli system discover` - Device discovery results
-
-### Basic Commands
-
+**Switch between inputs:**
 ```bash
-# Show version
-ezcoo-cli version
-
-# Switch input 2 to output 1 (default output)
+# Switch to input 2
 ezcoo-cli input switch 2
 
-# Switch input 3 to output 2
-ezcoo-cli input switch 3 --output 2
+# Switch to input 3 (output 1 is implicit)
+ezcoo-cli input switch 3 --output 1
+```
 
-# Get device help (pretty formatted - default)
-ezcoo-cli help
-
-# Get device help (raw output)
-ezcoo-cli help --format raw
-
-# Get device help (JSON output)
-ezcoo-cli help --format json
-
-# Short form using -f
-ezcoo-cli help -f json
-
-# Get system status (pretty by default)
+**Check current status:**
+```bash
+# View system information
 ezcoo-cli status
 
-# Get output routing as JSON
-ezcoo-cli output routing --format json
+# Check which input is currently active
+ezcoo-cli output routing
+
+# Check stream status
+ezcoo-cli output stream
 ```
+
+**Get device information:**
+```bash
+# View available commands
+ezcoo-cli help
+
+# Get raw device response (useful for debugging)
+ezcoo-cli help --format raw
+ezcoo-cli status --format raw
+```
+
+### Output Formats
+
+Most query commands support multiple output formats to suit different use cases. You can specify the format using the `--format` (or `-f`) flag:
+
+- **`pretty`** - Human-readable formatted output (default)
+- **`json`** - Machine-readable JSON output for scripting and automation
+- **`raw`** - Raw device response as received from the KVM
+
+For example, to get system status as JSON:
+```bash
+ezcoo-cli status --format json
+# or using the short form
+ezcoo-cli status -f json
+```
+
+> [!NOTE]
+> **Breaking Change in v0.2.0:** Version 0.1.0 always printed raw output. Starting from v0.2.0, commands default to pretty-formatted output. Use `--format raw` to get the previous behavior.
 
 ### Device Connection and Addressing
 
@@ -87,35 +104,27 @@ ezcoo-cli --address 5 status
 ezcoo-cli -a 5 status
 ```
 
-### Address Management
+### Multi-Device Setup
 
-The tool supports managing device addresses for multi-device setups on the same serial port:
+EZCOO devices support address-based multi-device setups where multiple KVM switches can share a single serial connection. Each device needs a unique address (0-99), with 0 being the default for single-device setups.
 
+**Discovering devices on the serial port:**
 ```bash
-# Discover all devices on the current serial port (scans addresses 0-99)
+# Scan all addresses (0-99)
 ezcoo-cli system discover
 
-# Discover devices in a specific address range on the serial port
+# Scan specific range
 ezcoo-cli system discover --start 0 --end 10
-
-# Get discovery results as JSON
-ezcoo-cli system discover --format json
-
-# Change device address from 0 to 5
-ezcoo-cli system set-address 5
-
-# Change address with confirmation skip
-ezcoo-cli system set-address 5 --yes
-
-# Change address of device currently at address 5 to address 10
-ezcoo-cli --address 5 system set-address 10
 ```
 
-> [!NOTE]
-> Device discovery scans different addresses on the **same serial port**, not different serial devices. Multiple EZCOO devices can share a single serial connection by using different addresses (0-99).
+**Changing device addresses:**
+```bash
+# Change device at address 0 to address 5
+ezcoo-cli system set-address 5
 
-> [!NOTE]
-> **Device Chaining:** The EZCOO devices support a "device chaining" feature that allows multiple devices to be connected on the same serial interface. While we have not been able to observe behavioral changes when using this feature, it is assumed to enable serial interface chaining for multi-device setups. Each device in the chain should be configured with a unique address (0-99) for proper communication.
+# Change device at address 5 to address 10
+ezcoo-cli --address 5 system set-address 10
+```
 
 > [!WARNING]
 > After changing a device's address, you must use the `--address` option to communicate with it at its new address.
@@ -187,45 +196,6 @@ with Device(Path("/dev/ttyUSB0")) as device:
         print(line, end="")
 ```
 
-### Error Handling
-
-Both interfaces provide specific exceptions for better error handling:
-
-```python
-from ezcoo_cli.kvm import KVM, KVMError
-from ezcoo_cli.device import DeviceError, DeviceConnectionError
-
-try:
-    kvm = KVM(Path("/dev/ttyUSB0"))
-    kvm.switch_input(2)
-except KVMError as e:
-    print(f"KVM operation failed: {e}")
-except DeviceConnectionError as e:
-    print(f"Failed to connect to device: {e}")
-```
-
-### Data Models
-
-The high-level interface returns structured data using dataclasses:
-
-```python
-# SystemStatus dataclass
-status = kvm.get_system_status()
-print(status.system_address)      # 0
-print(status.firmware_version)    # "2.03"
-
-# OutputRouting dataclass
-routing = kvm.get_output_routing()
-print(routing.output)  # 1
-print(routing.input)   # 2
-
-# StreamStatus dataclass
-stream = kvm.get_stream_status()
-print(stream.output)   # 1
-print(stream.status)   # "on"
-print(stream.enabled)  # True
-```
-
 ## Development
 
 This project uses uv for dependency management and ruff for linting.
@@ -245,61 +215,31 @@ uv run ruff format
 
 The test suite uses pytest-reserial to record and replay serial device interactions, allowing tests to run without physical hardware.
 
-### Quick Start
+### Running Tests
 
-```bash
-# Run tests with recorded traffic (no hardware needed)
-./scripts/test-replay.sh
-
-# Run tests with real hardware
-./scripts/test-with-hardware.sh
-
-# Record new traffic from hardware
-./scripts/test-record.sh
-```
-
-### Test Modes
-
-**1. Replay Mode (CI/CD, No Hardware)**
+**Replay Mode (no hardware needed):**
 ```bash
 ./scripts/test-replay.sh
-# or
-uv run pytest tests/ --replay -v
+# or: uv run pytest tests/ --replay -v
 ```
-Uses recorded `.jsonl` files to simulate device responses. Perfect for CI/CD pipelines and development without hardware.
 
-**2. Hardware Mode (Real Device)**
+**Hardware Mode (with real device):**
 ```bash
 ./scripts/test-with-hardware.sh
-# or
-uv run pytest tests/ -v
+# or: uv run pytest tests/ -v
 ```
-Runs tests against actual EZCOO device connected to `/dev/ttyUSB0`. Use this to verify functionality with real hardware.
 
-**3. Record Mode (Capture Traffic)**
+**Record Mode (capture new traffic):**
 ```bash
 ./scripts/test-record.sh
-# or
-uv run pytest tests/ --record -v
+# or: uv run pytest tests/ --record -v
 ```
-Records serial traffic from real hardware to `.jsonl` files. Run this when:
-- Adding new tests
-- Updating existing tests
-- Device firmware changes
-- Initial setup
 
-### Test Organization
+### Recorded Traffic
 
-- `tests/test_device.py` - Low-level Device class tests
-- `tests/test_kvm.py` - High-level KVM interface tests
-- `tests/test_cli.py` - CLI command tests
-- `tests/test_integration.py` - Integration and workflow tests
+pytest-reserial automatically records serial traffic in the `tests/` directory, with one recording file per test module.
 
-### Recorded Traffic Files
-
-Serial traffic is automatically recorded to `.jsonl` files in the `tests/` directory, with one file per test module.
-
-**Important:** Commit these `.jsonl` files to version control so other developers can run tests without hardware.
+**Important:** Commit these recording files to version control so others can run tests without hardware.
 
 ### Prerequisites for Recording
 
@@ -314,15 +254,21 @@ Serial traffic is automatically recorded to `.jsonl` files in the `tests/` direc
 
 Based on testing with EZCOO EZ-SW41HA-KVMU3L devices running firmware 2.03:
 
-#### Working Commands
+#### Working GET Commands
 
 | Command | Description | Response |
 |---------|-------------|----------|
 | `EZSTA` | Get system status | System info with address, firmware, serial config |
 | `EZH` | Get help | Complete command list |
-| `EZS OUTx VS INy` | Switch input | No response (SET command) |
 | `EZG OUTx VS` | Get output routing | Current input routing |
 | `EZG OUT1 STREAM` | Get stream status | Stream on/off status |
+
+#### Working SET Commands
+
+| Command | Description | Response | CLI Command |
+|---------|-------------|----------|-------------|
+| `EZS OUTx VS INy` | Switch input | No response (SET command) | `ezcoo-cli input switch <input_num>` |
+| `EZS ADDR xx` | Set system address | No response (SET command) | `ezcoo-cli system set-address <new_address>` |
 
 #### Unsupported/Unimplemented Commands
 
@@ -349,12 +295,6 @@ These SET commands have been tested and the device accepts them without errors (
 | `EZS OUTx VIDEOy` | Set output video mode (BYPASS/4K->2K) | Accepted by device, no observable effect | Effect unclear |
 | `EZS INx EDID y` | Set input EDID | Accepted by device, no observable effect | Effect unclear |
 | `EZS RST` | Reset to factory defaults | Accepted by device, but address was NOT reset (still at 01 after reset) | Effect unclear - may not work or may only reset some settings |
-
-**Implemented SET commands:**
-
-| Command | Description | Test Result | CLI Command |
-|---------|-------------|-------------|-------------|
-| `EZS ADDR xx` | Set system address | Works - successfully tested address change with prefix recovery | `ezcoo-cli system set-address <new_address>` |
 
 ## License
 
